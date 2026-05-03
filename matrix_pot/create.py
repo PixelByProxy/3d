@@ -18,11 +18,11 @@ HEIGHT = 100.0
 BOTTOM_THICKNESS = 3.0
 
 # Glyph band: keep stronger rims at top/bottom
-Z_GLYPH_MIN = 12.0
+Z_GLYPH_MIN = 8.0
 Z_GLYPH_MAX = 90.0
 
 # 1 mm pixels keep features printable and reduce tiny artifacts
-RES = 1.0
+RES = 0.8
 W = int(round(2 * math.pi * R_OUTER * RES))
 H = int(round(HEIGHT * RES))
 
@@ -44,8 +44,8 @@ glyphs = list("アイウエオカキクケコサシスセソタチツテトナ�
 glyphs = list("acdehimnou01234678-*='&_.|^~")
 random.seed(20260419)
 
-cell_w = 6 # col width
-cell_h = 10
+cell_w = 5 # col width
+cell_h = 8
 zmin_px = int(round((HEIGHT - Z_GLYPH_MAX) * RES))
 zmax_px = int(round((HEIGHT - Z_GLYPH_MIN) * RES))
 
@@ -63,7 +63,7 @@ while x < W:
     for _ in range(col_height_cells):
         if y + cell_h > zmax_px:
             break
-        if random.random() < 0.10:
+        if random.random() < 0.25:
             y += cell_h
             continue
 
@@ -115,7 +115,7 @@ while x < W:
 
         y += cell_h
 
-    x += cell_w + random.randint(5, 11)
+    x += cell_w + random.randint(2, 2)
 
 arr = np.array(mask) > 80
 mask.save(PREVIEW)
