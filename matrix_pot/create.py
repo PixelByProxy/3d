@@ -22,7 +22,7 @@ Z_GLYPH_MIN = 8.0
 Z_GLYPH_MAX = 90.0
 
 # 1 mm pixels keep features printable and reduce tiny artifacts
-RES = 0.8
+RES = 0.6
 W = int(round(2 * math.pi * R_OUTER * RES))
 H = int(round(HEIGHT * RES))
 
@@ -41,10 +41,10 @@ except TypeError:
     font = ImageFont.truetype(font_path, 11)
 
 glyphs = list("アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789+-=<>")
-glyphs = list("acdehimnou01234678-*='&_.|^~")
+glyphs = list("abcdefghijklmnopqrstuvwxyz1234579$+-*=%'&(,.;:{}>[]^~")
 random.seed(20260419)
 
-cell_w = 5 # col width
+cell_w = 6 # col width
 cell_h = 8
 zmin_px = int(round((HEIGHT - Z_GLYPH_MAX) * RES))
 zmax_px = int(round((HEIGHT - Z_GLYPH_MIN) * RES))
@@ -64,7 +64,7 @@ while x < W:
         if y + cell_h > zmax_px:
             break
         if random.random() < 0.25:
-            y += cell_h
+            y += cell_h + random.randint(0, cell_h)  # some vertical spacing variation
             continue
 
         ch = random.choice(glyphs)
@@ -77,7 +77,7 @@ while x < W:
         td.text((tx, ty), ch, font=font, fill=255)
 
         # Moderate dilation only; avoids the earlier oversized/merged glyph problem.
-        tile = tile.filter(ImageFilter.MaxFilter(1))
+        # tile = tile.filter(ImageFilter.MaxFilter(1))
 
         # Constrain the actual opening to avoid long bridges/overhangs.
         # Any horizontal run longer than 5 mm is split by adding black separators.
@@ -106,12 +106,12 @@ while x < W:
         #                 cleaned[yy, xx] = False
         # tile = Image.fromarray((cleaned * 255).astype(np.uint8), "L")
 
-        if x + cell_w <= W:
-            mask.paste(tile, (x, y), tile)
-        else:
-            part = W - x
-            mask.paste(tile.crop((0, 0, part, cell_h)), (x, y), tile.crop((0, 0, part, cell_h)))
-            mask.paste(tile.crop((part, 0, cell_w, cell_h)), (0, y), tile.crop((part, 0, cell_w, cell_h)))
+        # if x + cell_w <= W:
+        mask.paste(tile, (x, y), tile)
+        # else:
+        #     part = W - x
+        #     mask.paste(tile.crop((0, 0, part, cell_h)), (x, y), tile.crop((0, 0, part, cell_h)))
+        #     mask.paste(tile.crop((part, 0, cell_w, cell_h)), (0, y), tile.crop((part, 0, cell_w, cell_h)))
 
         y += cell_h
 
