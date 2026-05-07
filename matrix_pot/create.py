@@ -25,6 +25,8 @@ os.chdir(BASE)  # optional: change current working directory to script folder
 OUT = Path("./output/matrixpot.3mf")
 PREVIEW = Path("./output/matrixpot_preview.png")
 
+OUT.parent.mkdir(parents=True, exist_ok=True)
+
 # ============================================================================
 # POT GEOMETRY PARAMETERS (all dimensions in millimeters)
 # ============================================================================
@@ -65,7 +67,6 @@ except TypeError:
     font = ImageFont.truetype(font_path, 11)
 
 # Character set for Matrix-style pattern
-glyphs = list("アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789+-=<>")
 glyphs = list("abcdefghijklmnopqrstuvwxyz1234579$+-*=%'&(,.;:{}>[]^~")
 random.seed(20260419)  # Fixed seed for reproducible layout
 
@@ -278,43 +279,65 @@ green_mesh = make_liner()
 
 
 # ============================================================================
-# 3MF EXPORT: Convert meshes to 3D Manufacturing Format
+# 3MF EXPORT: Bambu Studio project-style 3MF with two real plates
 # ============================================================================
-# 3MF is a ZIP archive containing XML model data and metadata
+# This version keeps both meshes directly in 3D/3dmodel.model. The previous
+# external-object experiment made Bambu create two plates, but it could resolve
+# both plate entries to the first external component. Keeping top-level objects
+# inline avoids that ambiguity.
 
-def mesh_xml(mesh, obj_id, name, pid):
+BAMBU_PLATE_SPACING_MM = 307.2  # Bambu/Orca plate-grid spacing for 256 mm beds.
+BED_SIZE_MM = 256.0
+PLATE_CENTER_X_MM = BED_SIZE_MM / 2
+PLATE_CENTER_Y_MM = BED_SIZE_MM / 2
+
+def mesh_object_xml(mesh, obj_id, name, pid):
     """
-    Convert a trimesh object to 3MF XML format with color group reference.
-    
-    Args:
-        mesh: trimesh.Trimesh object to serialize
-        obj_id: unique object ID
-        name: display name in slicer software
-        pid: palette/color group ID to reference
-        
-    Returns:
-        XML string with vertices and triangles
+    Serialize one mesh as a top-level 3MF <object> element.
+
+    v6 color fix:
+    Bambu Studio is more reliable when color comes from the Bambu filament
+    slot metadata than when it comes only from the 3MF mesh/material color.
+    The mesh still carries standard 3MF color properties as a fallback, but
+    Metadata/project_settings.config and Metadata/model_settings.config now
+    explicitly define slot 1 as black and slot 2 as green and assign the liner
+    to extruder/slot 2.
     """
     out = [f'<object id="{obj_id}" type="model" name="{html.escape(name)}" pid="{pid}"><mesh><vertices>']
-    
+
     # Add vertex coordinates
     for x, y, z in mesh.vertices:
         out.append(f'<vertex x="{x:.5f}" y="{y:.5f}" z="{z:.5f}"/>')
-    
+
     out.append('</vertices><triangles>')
-    
-    # Add triangular faces with color index 0 (first color in the color group)
+
+    # Add triangular faces
     for a, b, c in mesh.faces:
-        out.append(f'<triangle v1="{int(a)}" v2="{int(b)}" v3="{int(c)}" p1="0" p2="0" p3="0"/>')
-    
+        out.append(
+            f'<triangle v1="{int(a)}" v2="{int(b)}" v3="{int(c)}" '
+            f'pid="{pid}" p1="0" p2="0" p3="0"/>'
+        )
+
     out.append('</triangles></mesh></object>')
-    return "".join(out)
+    return ''.join(out)
 
 
-# Build complete 3MF model XML with shell and liner as separate objects with separate color groups
-model = f'''<?xml version="1.0" encoding="UTF-8"?>
-<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02">
-  <metadata name="Application">ChatGPT Matrix Pot Print-Safe Glyphs for Bambu Studio</metadata>
+# Main model: two real top-level objects.
+#
+# Bambu Studio plates use the printer bed coordinate system, where a 256 mm
+# plate center is at X=128, Y=128. The meshes themselves are modeled around
+# X=0, Y=0, so translating each build item to the plate center keeps the pot
+# centered. Plate 2 is one Bambu plate-grid step above plate 1.
+model = f"""<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US"
+       xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"
+       xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02"
+       xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06"
+       requiredextensions="p">
+  <metadata name="Application">BambuStudio-02.04.00.70</metadata>
+  <metadata name="BambuStudio:3mfVersion">1</metadata>
+  <metadata name="CreationDate">2026-05-06</metadata>
+  <metadata name="Title">Matrix Pot - shell and liner on separate plates</metadata>
   <resources>
     <m:colorgroup id="2">
       <m:color color="#000000FF"/>
@@ -322,32 +345,151 @@ model = f'''<?xml version="1.0" encoding="UTF-8"?>
     <m:colorgroup id="3">
       <m:color color="#00FF00FF"/>
     </m:colorgroup>
-    {mesh_xml(black_mesh, 10, "Black shell", 2)}
-    {mesh_xml(green_mesh, 11, "Green watertight liner", 3)}
+    {mesh_object_xml(black_mesh, 1, "Black shell", 2)}
+    {mesh_object_xml(green_mesh, 2, "Green watertight liner", 3)}
   </resources>
   <build>
-    <item objectid="10" transform="1 0 0 0 1 0 0 0 1 0 0 0"/>
-    <item objectid="11" transform="1 0 0 0 1 0 0 0 1 0 0 120"/>
+    <item objectid="1" transform="1 0 0 0 1 0 0 0 1 {PLATE_CENTER_X_MM:.5f} {PLATE_CENTER_Y_MM:.5f} 0" p:buildplate="0"/>
+    <item objectid="2" transform="1 0 0 0 1 0 0 0 1 {PLATE_CENTER_X_MM + BAMBU_PLATE_SPACING_MM:.5f} {PLATE_CENTER_Y_MM:.5f} 0" p:buildplate="1"/>
   </build>
-</model>'''
+</model>"""
 
-# XML metadata required by 3MF specification
-content_types = '''<?xml version="1.0" encoding="UTF-8"?>
+# Bambu Studio object/plate metadata.
+# Important fix in v4: each build item gets a unique instance_id. In v3 both
+# plate entries used instance_id=0, so Bambu could bind both plates to the first
+# instance, duplicating the black shell and dropping the liner.
+model_settings = """<?xml version="1.0" encoding="UTF-8"?>
+<config>
+  <object id="1">
+    <metadata key="name" value="Black shell"/>
+    <metadata key="extruder" value="1"/>
+    <part id="1" subtype="normal_part">
+      <metadata key="name" value="Black shell"/>
+      <metadata key="extruder" value="1"/>
+      <metadata key="source_object_id" value="0"/>
+      <metadata key="source_volume_id" value="0"/>
+    </part>
+  </object>
+  <object id="2">
+    <metadata key="name" value="Green watertight liner"/>
+    <metadata key="extruder" value="2"/>
+    <part id="1" subtype="normal_part">
+      <metadata key="name" value="Green watertight liner"/>
+      <metadata key="extruder" value="2"/>
+      <metadata key="source_object_id" value="1"/>
+      <metadata key="source_volume_id" value="0"/>
+    </part>
+  </object>
+  <plate>
+    <metadata key="plater_id" value="1"/>
+    <metadata key="plater_name" value="Black shell"/>
+    <metadata key="filament_map_mode" value="Auto For Flush"/>
+    <metadata key="filament_maps" value="1 2"/>
+    <metadata key="filament_volume_maps" value="1 1"/>
+    <model_instance>
+      <metadata key="object_id" value="1"/>
+      <metadata key="instance_id" value="0"/>
+    </model_instance>
+  </plate>
+  <plate>
+    <metadata key="plater_id" value="2"/>
+    <metadata key="plater_name" value="Green liner"/>
+    <metadata key="filament_map_mode" value="Auto For Flush"/>
+    <metadata key="filament_maps" value="1 2"/>
+    <metadata key="filament_volume_maps" value="1 1"/>
+    <model_instance>
+      <metadata key="object_id" value="2"/>
+      <metadata key="instance_id" value="1"/>
+    </model_instance>
+  </plate>
+</config>"""
+
+# Minimal project settings with two visible filament colors. Bambu Studio can
+# replace these with your selected printer/material presets when you open it.
+project_settings = """{
+  "from": "project",
+  "name": "project_settings",
+  "version": "02.04.00.70",
+  "printer_model": "Bambu Lab P2S",
+  "curr_bed_type": "Textured PEI Plate",
+  "nozzle_diameter": ["0.4"],
+  "print_settings_id": "0.20mm Standard @BBL P2S",
+  "printer_settings_id": "Bambu Lab P2S 0.4 nozzle",
+  "default_print_profile": "0.20mm Standard @BBL P2S",
+  "default_filament_profile": ["Bambu PLA Basic @BBL P2S"],
+  "filament_colour": ["#000000", "#00FF00"],
+  "filament_colour_type": ["1", "1"],
+  "filament_settings_id": ["Bambu PLA Basic @BBL P2S", "Bambu PLA Basic @BBL P2S"],
+  "filament_type": ["PLA", "PLA"],
+  "filament_vendor": ["Bambu", "Bambu"],
+  "filament_ids": ["10101", "10501"],
+  "filament_diameter": ["1.75", "1.75"],
+  "filament_density": ["1.24", "1.24"],
+  "filament_map": ["1", "2"],
+  "enable_prime_tower": "0",
+  "different_settings_to_system": [
+    "enable_prime_tower",
+    "filament_colour;filament_colour_type;filament_density;filament_diameter;filament_ids;filament_settings_id;filament_type;filament_vendor",
+    "filament_colour;filament_colour_type;filament_density;filament_diameter;filament_ids;filament_settings_id;filament_type;filament_vendor",
+    ""
+  ]
+}"""
+
+slice_info = """<?xml version="1.0" encoding="UTF-8"?>
+<config>
+  <header>
+    <metadata key="X-BambuStudio-Version" value="02.04.00.70"/>
+    <metadata key="X-BambuStudio-PlateCount" value="2"/>
+  </header>
+  <plate>
+    <metadata key="index" value="1"/>
+    <metadata key="plater_name" value="Black shell"/>
+  </plate>
+  <plate>
+    <metadata key="index" value="2"/>
+    <metadata key="plater_name" value="Green liner"/>
+  </plate>
+</config>"""
+
+# XML metadata required by 3MF specification and Bambu project files.
+content_types = """<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>
-</Types>'''
+  <Default Extension="config" ContentType="application/vnd.ms-package.3dmanufacturing.config+xml"/>
+  <Default Extension="png" ContentType="image/png"/>
+</Types>"""
 
-rels = '''<?xml version="1.0" encoding="UTF-8"?>
+rels = """<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>
-</Relationships>'''
+</Relationships>"""
+
+# Tiny placeholder thumbnails. Real Bambu projects include these; including them
+# helps Bambu Studio recognize two saved plates even before slicing.
+thumb = Image.new("RGB", (16, 16), "white")
+thumb_path = OUT.parent / "_blank_plate_thumbnail.png"
+thumb.save(thumb_path)
+thumb_bytes = thumb_path.read_bytes()
+try:
+    thumb_path.unlink()
+except OSError:
+    pass
 
 # Write 3MF as ZIP archive
 with zipfile.ZipFile(OUT, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as z:
     z.writestr("[Content_Types].xml", content_types)
     z.writestr("_rels/.rels", rels)
     z.writestr("3D/3dmodel.model", model)
+    z.writestr("Metadata/model_settings.config", model_settings)
+    z.writestr("Metadata/project_settings.config", project_settings)
+    z.writestr("Metadata/slice_info.config", slice_info)
+    for plate_id in (1, 2):
+        z.writestr(f"Metadata/plate_{plate_id}.png", thumb_bytes)
+        z.writestr(f"Metadata/plate_{plate_id}_small.png", thumb_bytes)
+        z.writestr(f"Metadata/plate_no_light_{plate_id}.png", thumb_bytes)
+        z.writestr(f"Metadata/top_{plate_id}.png", thumb_bytes)
+        z.writestr(f"Metadata/pick_{plate_id}.png", thumb_bytes)
 
 # Print summary statistics
 print(f"Created: {OUT}")
@@ -355,4 +497,3 @@ print(f"Preview: {PREVIEW}")
 print(f"3MF size: {OUT.stat().st_size/1024:.1f} KB")
 print(f"Black shell faces: {len(black_mesh.faces)}")
 print(f"Green liner faces: {len(green_mesh.faces)}")
-
