@@ -426,9 +426,7 @@ project_settings = """{
   "filament_diameter": ["1.75", "1.75"],
   "filament_density": ["1.24", "1.24"],
   "filament_map": ["1", "2"],
-  "enable_prime_tower": "0",
   "different_settings_to_system": [
-    "enable_prime_tower",
     "filament_colour;filament_colour_type;filament_density;filament_diameter;filament_ids;filament_settings_id;filament_type;filament_vendor",
     "filament_colour;filament_colour_type;filament_density;filament_diameter;filament_ids;filament_settings_id;filament_type;filament_vendor",
     ""
