@@ -363,11 +363,21 @@ model_settings = """<?xml version="1.0" encoding="UTF-8"?>
   <object id="1">
     <metadata key="name" value="Black shell"/>
     <metadata key="extruder" value="1"/>
+    <metadata key="seam_position" value="random"/>
+    <metadata key="outer_wall_speed" value="50"/>
+    <metadata key="enable_support" value="1"/>
+    <metadata key="support_type" value="normal(auto)"/>
+    <metadata key="support_on_build_plate_only" value="1"/>
     <part id="1" subtype="normal_part">
       <metadata key="name" value="Black shell"/>
       <metadata key="extruder" value="1"/>
       <metadata key="source_object_id" value="0"/>
       <metadata key="source_volume_id" value="0"/>
+      <metadata key="seam_position" value="random"/>
+      <metadata key="outer_wall_speed" value="50"/>
+      <metadata key="enable_support" value="1"/>
+      <metadata key="support_type" value="normal(auto)"/>
+      <metadata key="support_on_build_plate_only" value="1"/>
     </part>
   </object>
   <object id="2">
