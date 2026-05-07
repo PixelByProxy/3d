@@ -14,6 +14,7 @@ Pipeline:
 
 import os
 from pathlib import Path
+import argparse
 import math, random, zipfile, html
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageChops
@@ -24,6 +25,23 @@ os.chdir(BASE)  # optional: change current working directory to script folder
 
 OUT = Path("./output/matrixpot.3mf")
 PREVIEW = Path("./output/matrixpot_preview.png")
+
+DEFAULT_RANDOM_SEED = 20260419
+
+def parse_args():
+    """Parse command-line options for the model generator."""
+    parser = argparse.ArgumentParser(
+        description="Generate a Matrix-style 3MF pot model."
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=DEFAULT_RANDOM_SEED,
+        help=f"Random seed for reproducible glyph layout. Defaults to {DEFAULT_RANDOM_SEED}.",
+    )
+    return parser.parse_args()
+
+args = parse_args()
 
 OUT.parent.mkdir(parents=True, exist_ok=True)
 
@@ -68,7 +86,7 @@ except TypeError:
 
 # Character set for Matrix-style pattern
 glyphs = list("abcdefghijklmnopqrstuvwxyz1234579$+-*=%'&(,.;:{}>[]^~")
-random.seed(20260419)  # Fixed seed for reproducible layout
+random.seed(args.seed)  # Fixed seed for reproducible layout
 
 # Glyph cell dimensions (in pixels at RES resolution)
 cell_w = 6  # Column width
