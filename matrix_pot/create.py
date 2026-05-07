@@ -26,6 +26,8 @@ os.chdir(BASE)  # optional: change current working directory to script folder
 OUT = Path("./output/matrixpot.3mf")
 PREVIEW = Path("./output/matrixpot_preview.png")
 
+OUT.parent.mkdir(parents=True, exist_ok=True)
+
 DEFAULT_RANDOM_SEED = 20260419
 
 def parse_args():
@@ -42,8 +44,6 @@ def parse_args():
     return parser.parse_args()
 
 args = parse_args()
-
-OUT.parent.mkdir(parents=True, exist_ok=True)
 
 # ============================================================================
 # POT GEOMETRY PARAMETERS (all dimensions in millimeters)
@@ -250,7 +250,15 @@ black_mesh = trimesh.Trimesh(vertices=np.array(black_v, dtype=float), faces=np.a
 
 def make_liner(r_outer=56.55, wall=2.50, z0=3.25, height=92.0, bottom=1.5, seg=240):
     """
-    Create a watertight cylindrical liner with solid bottom.
+    Create a manifold cylindrical liner with a solid bottom.
+
+    The previous version created a separate center-bottom and center-floor
+    vertex for every segment. Those points occupied the same coordinates, but
+    they were not topologically connected, so slicers saw open/non-manifold
+    seams in the bottom and floor fans. It also added an extra sloped face band
+    that made three faces meet along the outer-bottom and inner-floor ring
+    edges. This version uses shared ring vertices plus one shared center vertex
+    per disk, and only emits true boundary faces of the solid liner.
     
     Args:
         r_outer: outer radius of liner
@@ -264,34 +272,58 @@ def make_liner(r_outer=56.55, wall=2.50, z0=3.25, height=92.0, bottom=1.5, seg=2
     ztop = z0 + height
     zfloor = z0 + bottom
     verts, faces = [], []
-    
-    # Create vertices at each angular segment
+
+    # Four shared rings:
+    #   0: outer base, 1: outer top, 2: inner floor, 3: inner top
+    for ring_r, ring_z in (
+        (r_outer, z0),
+        (r_outer, ztop),
+        (r_inner, zfloor),
+        (r_inner, ztop),
+    ):
+        for i in range(seg):
+            t = 2 * math.pi * i / seg
+            c, s = math.cos(t), math.sin(t)
+            verts.append((ring_r*c, ring_r*s, ring_z))
+
+    center_bottom = len(verts)
+    verts.append((0, 0, z0))
+    center_floor = len(verts)
+    verts.append((0, 0, zfloor))
+
+    outer_base = 0
+    outer_top = seg
+    inner_floor = 2 * seg
+    inner_top = 3 * seg
+
+    # Create faces. Winding is consistent and every edge is used exactly twice.
     for i in range(seg):
-        t = 2 * math.pi * i / seg
-        c, s = math.cos(t), math.sin(t)
-        verts.extend([
-            (r_outer*c, r_outer*s, z0),      # Outer ring at base
-            (r_outer*c, r_outer*s, ztop),    # Outer ring at top
-            (r_inner*c, r_inner*s, zfloor),  # Inner ring at floor
-            (r_inner*c, r_inner*s, ztop),    # Inner ring at top
-            (0, 0, z0),                      # Center point at base
-            (0, 0, zfloor),                  # Center point at floor
-        ])
-    
-    # Create faces connecting vertices
-    for i in range(seg):
-        a = 6*i
-        b = 6*((i+1) % seg)
+        j = (i + 1) % seg
+
+        ob_i, ob_j = outer_base + i, outer_base + j
+        ot_i, ot_j = outer_top + i, outer_top + j
+        if_i, if_j = inner_floor + i, inner_floor + j
+        it_i, it_j = inner_top + i, inner_top + j
+
         faces.extend([
-            (a, b, b+1), (a, b+1, a+1),      # Outer wall
-            (a+2, a+3, b+3), (a+2, b+3, b+2), # Inner wall
-            (a+1, b+1, b+3), (a+1, b+3, a+3), # Top seal
-            (a+4, b, a),                      # Bottom radial (outer to center)
-            (a+5, a+2, b+2),                  # Floor radial (inner to center)
-            (a, b, b+2), (a, b+2, a+2),       # Side walls
+            (ob_i, ob_j, ot_j), (ob_i, ot_j, ot_i),          # Outer wall
+            (if_i, it_i, it_j), (if_i, it_j, if_j),          # Inner wall
+            (ot_i, ot_j, it_j), (ot_i, it_j, it_i),          # Top rim annulus
+            (center_bottom, ob_j, ob_i),                     # Bottom disk
+            (center_floor, if_i, if_j),                      # Inner floor disk
         ])
-    
-    return trimesh.Trimesh(vertices=np.array(verts, dtype=float), faces=np.array(faces, dtype=np.int64), process=False)
+
+    mesh = trimesh.Trimesh(
+        vertices=np.array(verts, dtype=float),
+        faces=np.array(faces, dtype=np.int64),
+        process=False,
+    )
+
+    # Fail early if a future edit reintroduces non-manifold liner geometry.
+    if not mesh.is_watertight or not mesh.is_winding_consistent:
+        raise ValueError("Green liner mesh is not watertight/manifold")
+
+    return mesh
 
 green_mesh = make_liner()
 
