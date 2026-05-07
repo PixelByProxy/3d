@@ -282,20 +282,20 @@ green_mesh = make_liner()
 # ============================================================================
 # 3MF is a ZIP archive containing XML model data and metadata
 
-def mesh_xml(mesh, obj_id, name, pindex):
+def mesh_xml(mesh, obj_id, name, pid):
     """
-    Convert a trimesh object to 3MF XML format.
+    Convert a trimesh object to 3MF XML format with color group reference.
     
     Args:
         mesh: trimesh.Trimesh object to serialize
         obj_id: unique object ID
         name: display name in slicer software
-        pindex: material index (0=black shell, 1=green liner)
+        pid: palette/color group ID to reference
         
     Returns:
         XML string with vertices and triangles
     """
-    out = [f'<object id="{obj_id}" type="model" name="{html.escape(name)}" pid="1" pindex="{pindex}"><mesh><vertices>']
+    out = [f'<object id="{obj_id}" type="model" name="{html.escape(name)}" pid="{pid}"><mesh><vertices>']
     
     # Add vertex coordinates
     for x, y, z in mesh.vertices:
@@ -303,29 +303,31 @@ def mesh_xml(mesh, obj_id, name, pindex):
     
     out.append('</vertices><triangles>')
     
-    # Add triangular faces (referencing vertex indices)
+    # Add triangular faces with color index 0 (first color in the color group)
     for a, b, c in mesh.faces:
-        out.append(f'<triangle v1="{int(a)}" v2="{int(b)}" v3="{int(c)}"/>')
+        out.append(f'<triangle v1="{int(a)}" v2="{int(b)}" v3="{int(c)}" p1="0" p2="0" p3="0"/>')
     
     out.append('</triangles></mesh></object>')
     return "".join(out)
 
 
-# Build complete 3MF model XML with both shell and liner
+# Build complete 3MF model XML with shell and liner as separate objects with separate color groups
 model = f'''<?xml version="1.0" encoding="UTF-8"?>
-<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02">
   <metadata name="Application">ChatGPT Matrix Pot Print-Safe Glyphs for Bambu Studio</metadata>
   <resources>
-    <basematerials id="1">
-      <base name="Black shell" displaycolor="#000000FF"/>
-      <base name="Green watertight liner" displaycolor="#00FF00FF"/>
-    </basematerials>
-    {mesh_xml(black_mesh, 2, "Black shell", 0)}
-    {mesh_xml(green_mesh, 3, "Green watertight liner", 1)}
+    <m:colorgroup id="2">
+      <m:color color="#000000FF"/>
+    </m:colorgroup>
+    <m:colorgroup id="3">
+      <m:color color="#00FF00FF"/>
+    </m:colorgroup>
+    {mesh_xml(black_mesh, 10, "Black shell", 2)}
+    {mesh_xml(green_mesh, 11, "Green watertight liner", 3)}
   </resources>
   <build>
-    <item objectid="2"/>
-    <item objectid="3"/>
+    <item objectid="10" transform="1 0 0 0 1 0 0 0 1 0 0 0"/>
+    <item objectid="11" transform="1 0 0 0 1 0 0 0 1 0 0 120"/>
   </build>
 </model>'''
 
